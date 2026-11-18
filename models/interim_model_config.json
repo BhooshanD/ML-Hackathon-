@@ -1,0 +1,17 @@
+{
+  "model": "LightGBM",
+  "features": [
+    "f_dist",
+    "f_proj_frac",
+    "f_dist_rank",
+    "f_heading_diff",
+    "f_heading_valid",
+    "f_arc_len",
+    "f_n_cands",
+    "f_dist_rel",
+    "f_speed",
+    "f_dt_prev",
+    "f_no_cand_in_radius"
+  ],
+  "note": "interim - untuned"
+}
