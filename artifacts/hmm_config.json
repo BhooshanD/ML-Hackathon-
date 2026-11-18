@@ -1,0 +1,14 @@
+{
+  "w_cls": 1.0,
+  "w_dist": 0.25,
+  "sigma": 10.0,
+  "beta": 2.5,
+  "gap_beta_scale": 0.0,
+  "back_tol": 30.0,
+  "back_penalty": 1.0,
+  "vmax": 50.0,
+  "route_factor": 3.0,
+  "route_slack": 200.0,
+  "cache_limit": 1500.0,
+  "eps": 1e-06
+}
