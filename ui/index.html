@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PathSnap</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+:root{
+  --ink:#14213D; --ink-2:#51607A; --line:#D6DEE7; --paper:#ECF0F4; --panel:#FFFFFF;
+  --route:#2447F5; --gps:#E89B00; --ok:#17996A; --warn:#C77700; --bad:#D03A55;
+  font-family:'Manrope',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  color:var(--ink);
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;background:var(--paper)}
+body{display:grid;grid-template-rows:56px 1fr;font-size:14px;font-variant-numeric:tabular-nums}
+:focus-visible{outline:3px solid #7aa2ff;outline-offset:2px}
+button{font:inherit;color:inherit}
+
+/* ---------- top bar ---------- */
+.top{display:flex;align-items:center;justify-content:space-between;padding:0 20px;background:var(--ink);color:#fff}
+.brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:19px;letter-spacing:-.02em}
+.brand small{font-weight:600;font-size:13px;opacity:.65;letter-spacing:0}
+.pill{display:inline-flex;align-items:center;gap:8px;border:1px solid rgba(255,255,255,.28);background:rgba(255,255,255,.08);
+  color:#fff;border-radius:999px;padding:7px 14px;font-size:13px;font-weight:600;cursor:pointer}
+.pill:hover{background:rgba(255,255,255,.16)}
+.dot{width:9px;height:9px;border-radius:50%;background:#9aa6bb}
+.pill[data-s=ok] .dot{background:#3ddc97}
+.pill[data-s=bad] .dot{background:#ff6b81}
+.pill[data-s=wait] .dot{background:#ffd166}
+
+/* ---------- layout ---------- */
+.app{display:grid;grid-template-columns:340px 1fr;min-height:0}
+.side{background:var(--panel);border-right:1px solid var(--line);overflow:auto;padding:18px 16px;display:flex;flex-direction:column;gap:22px}
+.stage{position:relative;min-height:0;background:var(--paper)}
+#map{position:absolute;inset:0;background:#E6ECF1}
+#map.plain{background-color:#E6ECF1;
+  background-image:linear-gradient(#d3dce5 1px,transparent 1px),linear-gradient(90deg,#d3dce5 1px,transparent 1px);background-size:48px 48px}
+
+h2{font-size:15px;font-weight:800;margin:0 0 2px}
+.hint{color:var(--ink-2);font-size:13px;margin:0 0 12px;line-height:1.5}
+
+/* ---------- trip list ---------- */
+#tripList{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.trip{display:grid;grid-template-columns:1fr auto;column-gap:10px;width:100%;text-align:left;border:1px solid var(--line);
+  background:#fff;border-radius:10px;padding:10px 12px;cursor:pointer}
+.trip:hover{border-color:#aab7c6}
+.trip[aria-current=true]{border-color:var(--route);box-shadow:0 0 0 3px rgba(36,71,245,.14)}
+.trip .name{font-weight:700}
+.trip .st{font-size:12px;font-weight:700;color:var(--ink-2);text-align:right}
+.trip .bar{grid-column:1/-1;height:4px;border-radius:2px;background:var(--paper);margin-top:8px;overflow:hidden}
+.trip .bar i{display:block;height:100%;width:0;background:var(--ok);transition:width .6s}
+.trip.running .st{color:var(--route)}
+.trip.failed .st{color:var(--bad)}
+
+.btn{font-weight:700;border-radius:10px;padding:11px 16px;border:1px solid var(--route);background:var(--route);color:#fff;cursor:pointer;width:100%}
+.btn:hover{filter:brightness(1.08)}
+.btn.ghost{background:#fff;color:var(--ink);border-color:var(--line);width:auto}
+.btn:disabled{opacity:.55;cursor:default;filter:none}
+
+.summary{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}
+.summary div{background:var(--paper);border-radius:10px;padding:9px 10px}
+.summary b{display:block;font-size:17px;font-weight:800}
+.summary span{font-size:11.5px;color:var(--ink-2)}
+
+details summary{cursor:pointer;font-weight:800;font-size:15px;margin-bottom:8px}
+#log{list-style:none;margin:0;padding:0;display:grid;gap:4px;font-size:12.5px;color:var(--ink-2)}
+#log li{display:grid;grid-template-columns:auto 1fr auto;gap:8px;padding:5px 8px;border-radius:6px;background:var(--paper)}
+#log .bad{color:var(--bad);font-weight:700}
+
+/* ---------- floating cards on the map ---------- */
+.card{position:absolute;z-index:1100;background:rgba(255,255,255,.95);backdrop-filter:blur(8px);
+  border:1px solid var(--line);border-radius:14px;box-shadow:0 10px 30px rgba(20,33,61,.18)}
+.results{left:16px;top:16px;width:310px;padding:16px;display:none}
+.results.on{display:block}
+.results h3{margin:0;font-size:16px;font-weight:800}
+.results .sub{color:var(--ink-2);font-size:12.5px;margin-top:2px}
+.rbody{display:grid;grid-template-columns:104px 1fr;gap:14px;align-items:center;margin-top:12px}
+.ring{width:104px;height:104px}
+.ring .trk{fill:none;stroke:var(--paper);stroke-width:9}
+.ring .val{fill:none;stroke:var(--ok);stroke-width:9;stroke-linecap:round;stroke-dasharray:276.46;stroke-dashoffset:276.46;
+  transition:stroke-dashoffset .9s cubic-bezier(.2,.7,.2,1),stroke .3s}
+.ring text{font-size:19px;font-weight:800;fill:var(--ink);text-anchor:middle}
+.stats{display:grid;gap:7px;margin:0}
+.stats div{display:flex;justify-content:space-between;gap:8px}
+.stats dt{color:var(--ink-2)} .stats dd{margin:0;font-weight:700}
+.extra{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:12px}
+.extra div{background:var(--paper);border-radius:8px;padding:7px 9px}
+.extra b{display:block;font-size:15px}
+.extra span{font-size:11.5px;color:var(--ink-2)}
+.banner{margin-top:12px;background:#FFF4D6;color:#6b4a00;border-radius:8px;padding:8px 10px;font-size:12.5px;line-height:1.45;display:none}
+.banner.on{display:block}
+
+.layers{right:16px;top:16px;padding:12px 14px;width:220px}
+.layers h3{margin:0 0 8px;font-size:13px;font-weight:800}
+.seg{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--line);border-radius:9px;overflow:hidden;margin-bottom:10px}
+.seg button{border:0;background:#fff;padding:6px 0;font-size:12px;font-weight:700;cursor:pointer;color:var(--ink-2)}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button[aria-pressed=true]{background:var(--ink);color:#fff}
+.tog{display:flex;align-items:center;gap:9px;padding:4px 0;font-weight:600;cursor:pointer}
+.tog input{accent-color:var(--route);width:15px;height:15px;margin:0}
+.sw{width:14px;height:14px;border-radius:50%;flex:none}
+.sw.line{height:5px;border-radius:3px;width:16px}
+
+.timeline{left:50%;transform:translateX(-50%);bottom:22px;width:min(560px,calc(100% - 380px));padding:10px 14px;display:none;align-items:center;gap:12px}
+.timeline.on{display:flex}
+.timeline button{border:1px solid var(--line);background:#fff;border-radius:9px;padding:7px 12px;font-weight:700;cursor:pointer;min-width:68px}
+.timeline input{flex:1;accent-color:var(--route)}
+.timeline .tl{font-size:12.5px;color:var(--ink-2);min-width:150px;text-align:right}
+
+.empty{position:absolute;inset:0;z-index:1050;display:grid;place-items:center;pointer-events:none;padding:24px}
+.empty > div{background:rgba(255,255,255,.96);border:1px solid var(--line);border-radius:16px;padding:22px 26px;max-width:380px;
+  text-align:center;box-shadow:0 10px 30px rgba(20,33,61,.14);pointer-events:auto}
+.empty h3{margin:0 0 6px;font-size:18px;font-weight:800}
+.empty p{margin:0;color:var(--ink-2);line-height:1.55}
+.empty .btn{margin-top:14px;width:auto}
+.empty.hide{display:none}
+
+dialog{border:0;border-radius:16px;padding:22px;width:min(440px,92vw);box-shadow:0 20px 60px rgba(20,33,61,.35)}
+dialog::backdrop{background:rgba(20,33,61,.45)}
+dialog h3{margin:0 0 6px;font-size:18px}
+dialog p{margin:0 0 12px;color:var(--ink-2);line-height:1.5}
+dialog input{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;font:inherit;margin-bottom:14px}
+dialog .row{display:flex;gap:8px;justify-content:flex-end}
+dialog .row .btn{width:auto}
+
+.pin{width:18px;height:18px;border-radius:50%;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.4)}
+.leaflet-container{font-family:inherit}
+
+@media (max-width:860px){
+  html,body{height:auto}
+  body{display:block}
+  .top{height:56px}
+  .app{display:block}
+  .stage{height:68vh;order:-1}
+  .side{border-right:0}
+  .results{width:calc(100% - 32px);top:auto;bottom:16px;left:16px}
+  .results.on ~ .timeline{display:none}
+  .layers{width:190px}
+  .timeline{width:calc(100% - 32px);bottom:auto;top:16px;left:16px;transform:none}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="brand">
+    <svg width="30" height="30" viewBox="0 0 30 30" aria-hidden="true">
+      <circle cx="6" cy="21" r="2.6" fill="#E89B00"/><circle cx="14" cy="9" r="2.6" fill="#E89B00"/><circle cx="24" cy="15" r="2.6" fill="#E89B00"/>
+      <path d="M4 18 C 10 18, 9 8, 15 8 S 21 15, 27 12" fill="none" stroke="#8FA8FF" stroke-width="3" stroke-linecap="round"/>
+    </svg>
+    PathSnap <small>Route reconstruction</small>
+  </div>
+  <button class="pill" id="apiPill" data-s="wait" aria-label="API connection settings"><span class="dot"></span><span id="apiText">Connecting…</span></button>
+</header>
+
+<main class="app">
+  <aside class="side">
+    <section>
+      <h2>Evaluation trips</h2>
+      <p class="hint">Select a trip. PathSnap sends it to the API and draws the matched route over the raw GPS points.</p>
+      <ul id="tripList"></ul>
+      <div style="height:12px"></div>
+      <button class="btn" id="runAll" disabled>Run all trips</button>
+      <div class="summary" id="summary" hidden>
+        <div><b id="sDone">0</b><span>Completed</span></div>
+        <div><b id="sAcc">N/A</b><span>Mean accuracy</span></div>
+        <div><b id="sMs">N/A</b><span>Mean response</span></div>
+      </div>
+    </section>
+    <section>
+      <details open>
+        <summary>API activity</summary>
+        <ul id="log"><li><span></span><span>No requests yet.</span><span></span></li></ul>
+      </details>
+    </section>
+  </aside>
+
+  <section class="stage">
+    <div id="map"></div>
+
+    <div class="empty" id="empty"><div>
+      <h3 id="emptyTitle">No trip loaded</h3>
+      <p id="emptyText">Choose a trip on the left to run it through the pipeline.</p>
+      <button class="btn" id="emptyBtn" hidden>Open API settings</button>
+    </div></div>
+
+    <div class="card results" id="results">
+      <h3 id="rTitle">Trip</h3>
+      <div class="sub" id="rSub"></div>
+      <div class="rbody">
+        <svg class="ring" viewBox="0 0 100 100" role="img" aria-label="Accuracy">
+          <circle class="trk" cx="50" cy="50" r="44"/>
+          <circle class="val" id="ringVal" cx="50" cy="50" r="44" transform="rotate(-90 50 50)"/>
+          <text x="50" y="56" id="ringText">N/A</text>
+        </svg>
+        <dl class="stats">
+          <div><dt>GPS points</dt><dd id="stGps">0</dd></div>
+          <div><dt>Route vertices</dt><dd id="stRoute">0</dd></div>
+          <div><dt>Response time</dt><dd id="stMs">0</dd></div>
+        </dl>
+      </div>
+      <div class="extra" id="extra"></div>
+      <div class="banner" id="banner">This trip uses placeholder data from the dummy pipeline. Do not use it in the report.</div>
+    </div>
+
+    <div class="card layers">
+      <h3>Map</h3>
+      <div class="seg" id="seg">
+        <button data-base="light" aria-pressed="true">Light</button>
+        <button data-base="dark" aria-pressed="false">Dark</button>
+        <button data-base="osm" aria-pressed="false">Streets</button>
+        <button data-base="none" aria-pressed="false">Plain</button>
+      </div>
+      <label class="tog"><input type="checkbox" id="tgGps" checked><span class="sw" style="background:var(--gps)"></span>GPS observations</label>
+      <label class="tog"><input type="checkbox" id="tgTrail"><span class="sw line" style="background:var(--gps);opacity:.55"></span>GPS trail</label>
+      <label class="tog"><input type="checkbox" id="tgRoute" checked><span class="sw line" style="background:var(--route)"></span>Predicted route</label>
+    </div>
+
+    <div class="card timeline" id="timeline">
+      <button id="playBtn">Play</button>
+      <input type="range" id="scrub" min="0" max="0" value="0" aria-label="Step through GPS points">
+      <span class="tl" id="tlText"></span>
+    </div>
+  </section>
+</main>
+
+<dialog id="settings">
+  <h3>API connection</h3>
+  <p>Enter the address of the machine running the API. On the demo setup this is Laptop 1, for example <b>http://192.168.1.23:8000</b>.</p>
+  <input id="apiInput" type="url" placeholder="http://localhost:8000" autocomplete="off">
+  <div class="row">
+    <button class="btn ghost" id="cancelSet" type="button">Cancel</button>
+    <button class="btn" id="saveSet" type="button">Save and reconnect</button>
+  </div>
+</dialog>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+(() => {
+  const $ = (s, el = document) => el.querySelector(s);
+  const store = {
+    get: k => { try { return localStorage.getItem(k); } catch (e) { return null; } },
+    set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} }
+  };
+  const qs = new URLSearchParams(location.search);
+  const state = {
+    api: (qs.get('api') || store.get('pathsnap.api') || 'http://localhost:8000').replace(/\/+$/, ''),
+    trips: [], results: {}, selected: null, base: 'light', busy: false,
+    cur: null, raf: 0, play: 0, idx: 0
+  };
+
+  /* ---------- helpers ---------- */
+  const pct = (v, d = 1) => (v * 100).toFixed(d) + '%';
+  const fmtMs = ms => ms >= 1000 ? (ms / 1000).toFixed(2) + ' s' : Math.round(ms) + ' ms';
+  const nice = k => { const s = k.replace(/_/g, ' '); return s.charAt(0).toUpperCase() + s.slice(1); };
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  const fracOf = a => (typeof a === 'number' && isFinite(a)) ? (a > 1 ? a / 100 : a) : null;
+  const accColor = f => f >= 0.9 ? 'var(--ok)' : f >= 0.7 ? 'var(--warn)' : 'var(--bad)';
+
+  /* ---------- API ---------- */
+  function logReq(path, status, ms, failed) {
+    const ul = $('#log');
+    if (ul.children.length === 1 && !ul.firstChild.dataset.row) ul.innerHTML = '';
+    const li = el('li'); li.dataset.row = '1';
+    li.append(el('span', failed ? 'bad' : '', failed ? 'ERR' : status), el('span', '', 'GET ' + path), el('span', '', fmtMs(ms)));
+    ul.prepend(li);
+    while (ul.children.length > 8) ul.lastChild.remove();
+  }
+  async function call(path, timeoutMs = 120000) {
+    const t0 = performance.now();
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), timeoutMs);
+    try {
+      const r = await fetch(state.api + path, { signal: ctl.signal });
+      const ms = performance.now() - t0;
+      logReq(path, r.status, ms, !r.ok);
+      if (!r.ok) throw new Error('The API answered ' + r.status + ' for ' + path);
+      return { data: await r.json(), ms };
+    } catch (e) {
+      if (e.name === 'AbortError') { logReq(path, 0, performance.now() - t0, true); throw new Error('The request timed out.'); }
+      if (e instanceof TypeError) { logReq(path, 0, performance.now() - t0, true); throw new Error('Could not reach ' + state.api); }
+      throw e;
+    } finally { clearTimeout(timer); }
+  }
+
+  /* ---------- map ---------- */
+  const map = L.map('map', { zoomControl: false, preferCanvas: true }).setView([20, 0], 2);
+  L.control.zoom({ position: 'bottomright' }).addTo(map);
+  const esri = (name) => L.tileLayer(
+    'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/' + name + '/MapServer/tile/{z}/{y}/{x}',
+    { attribution: 'Tiles &copy; Esri', maxNativeZoom: 16, maxZoom: 19 });
+  const bases = {
+    light: esri('World_Light_Gray_Base'),
+    dark: esri('World_Dark_Gray_Base'),
+    osm: L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap contributors', maxZoom: 19 }),
+    none: null
+  };
+  const groups = {
+    trail: L.layerGroup(), gps: L.layerGroup().addTo(map), route: L.layerGroup().addTo(map),
+    pins: L.layerGroup().addTo(map), cursor: L.layerGroup().addTo(map)
+  };
+  let activeBase = null;
+  function setBase(name) {
+    state.base = name;
+    if (activeBase) map.removeLayer(activeBase);
+    activeBase = bases[name];
+    if (activeBase) activeBase.addTo(map).bringToBack();
+    $('#map').classList.toggle('plain', !activeBase);
+    document.querySelectorAll('#seg button').forEach(b => b.setAttribute('aria-pressed', b.dataset.base === name));
+    if (state.cur) drawResult(state.cur, false);
+  }
+  const routeColor = () => state.base === 'dark' ? '#6FA8FF' : '#2447F5';
+
+  function geoToLines(g) {
+    if (!g) return [];
+    switch (g.type) {
+      case 'FeatureCollection': return g.features.flatMap(f => geoToLines(f.geometry));
+      case 'Feature': return geoToLines(g.geometry);
+      case 'GeometryCollection': return g.geometries.flatMap(geoToLines);
+      case 'LineString': return [g.coordinates.map(([x, y]) => [y, x])];
+      case 'MultiLineString': return g.coordinates.map(l => l.map(([x, y]) => [y, x]));
+      default: return [];
+    }
+  }
+  function pin(latlng, color, label) {
+    return L.marker(latlng, {
+      icon: L.divIcon({ className: '', html: '<div class="pin" style="background:' + color + '"></div>', iconSize: [18, 18], iconAnchor: [9, 9] }),
+      keyboard: false
+    }).bindTooltip(label);
+  }
+  function animateRoute(lines, animate) {
+    cancelAnimationFrame(state.raf);
+    groups.route.clearLayers();
+    const base = { lineCap: 'round', lineJoin: 'round', interactive: false };
+    const casings = lines.map(() => L.polyline([], { ...base, color: '#fff', weight: 10, opacity: 0.9 }).addTo(groups.route));
+    const strokes = lines.map(() => L.polyline([], { ...base, color: routeColor(), weight: 5 }).addTo(groups.route));
+    const total = lines.reduce((a, l) => a + l.length, 0);
+    const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const paint = n => {
+      let used = 0;
+      lines.forEach((l, i) => {
+        const take = Math.max(0, Math.min(l.length, n - used)); used += l.length;
+        const pts = take >= l.length ? l : l.slice(0, take);
+        casings[i].setLatLngs(pts); strokes[i].setLatLngs(pts);
+      });
+    };
+    if (!animate || reduce || total < 4) { paint(total); return; }
+    const dur = Math.min(2400, 700 + total * 10), t0 = performance.now();
+    const step = now => { const k = Math.min(1, (now - t0) / dur); paint(Math.ceil(k * total)); if (k < 1) state.raf = requestAnimationFrame(step); };
+    state.raf = requestAnimationFrame(step);
+  }
+
+  function drawResult(res, animate = true) {
+    const gps = res.gps, lines = geoToLines(res.predicted_route);
+    groups.gps.clearLayers(); groups.trail.clearLayers(); groups.pins.clearLayers(); groups.cursor.clearLayers();
+    gps.forEach((p, i) => L.circleMarker(p, { radius: 3.5, color: '#14213D', weight: 1, fillColor: '#E89B00', fillOpacity: 0.95 })
+      .bindTooltip('GPS point ' + (i + 1)).addTo(groups.gps));
+    L.polyline(gps, { color: '#E89B00', weight: 2, opacity: 0.6, dashArray: '4 6', interactive: false }).addTo(groups.trail);
+    pin(gps[0], '#17996A', 'Start').addTo(groups.pins);
+    pin(gps[gps.length - 1], '#D03A55', 'End').addTo(groups.pins);
+    animateRoute(lines, animate);
+    if (animate) {
+      const b = L.latLngBounds([...gps, ...lines.flat()]);
+      const wide = innerWidth > 860;
+      map.fitBounds(b, { paddingTopLeft: wide ? [350, 50] : [20, 60], paddingBottomRight: [60, wide ? 110 : 150], maxZoom: 18 });
+    }
+    setCursor(state.idx = 0);
+  }
+
+  /* ---------- timeline ---------- */
+  let cursorMarker = null;
+  function setCursor(i) {
+    const gps = state.cur && state.cur.gps; if (!gps) return;
+    state.idx = i;
+    groups.cursor.clearLayers();
+    cursorMarker = L.circleMarker(gps[i], { radius: 10, color: '#14213D', weight: 3, fillColor: '#fff', fillOpacity: 1, interactive: false }).addTo(groups.cursor);
+    $('#scrub').value = i;
+    $('#tlText').textContent = 'Point ' + (i + 1) + ' of ' + gps.length + ' at ' + gps[i][0].toFixed(5) + ', ' + gps[i][1].toFixed(5);
+  }
+  function stopPlay() { clearInterval(state.play); state.play = 0; $('#playBtn').textContent = 'Play'; }
+  $('#playBtn').onclick = () => {
+    if (state.play) return stopPlay();
+    const n = state.cur.gps.length; if (state.idx >= n - 1) state.idx = 0;
+    $('#playBtn').textContent = 'Pause';
+    state.play = setInterval(() => {
+      state.idx++;
+      if (state.idx >= n - 1) { state.idx = n - 1; stopPlay(); }
+      setCursor(state.idx);
+    }, Math.max(30, Math.min(120, 8000 / n)));
+  };
+  $('#scrub').oninput = e => { stopPlay(); setCursor(+e.target.value); };
+
+  /* ---------- results card ---------- */
+  function showResults(id, res, ms) {
+    stopPlay();
+    state.cur = res;
+    const lines = geoToLines(res.predicted_route);
+    $('#empty').classList.add('hide');
+    $('#results').classList.add('on');
+    $('#timeline').classList.add('on');
+    $('#scrub').max = res.gps.length - 1;
+    $('#rTitle').textContent = id;
+    $('#rSub').textContent = 'Reconstructed by the API';
+    const f = fracOf(res.accuracy);
+    const val = $('#ringVal');
+    val.style.strokeDashoffset = f == null ? 276.46 : 276.46 * (1 - Math.min(1, Math.max(0, f)));
+    val.style.stroke = f == null ? 'var(--line)' : accColor(f);
+    $('#ringText').textContent = f == null ? 'N/A' : pct(f);
+    $('#stGps').textContent = res.gps.length;
+    $('#stRoute').textContent = lines.reduce((a, l) => a + l.length, 0);
+    $('#stMs').textContent = fmtMs(ms);
+    const ex = $('#extra'); ex.innerHTML = '';
+    Object.entries(res.metrics || {}).forEach(([k, v]) => {
+      if (typeof v !== 'number') return;
+      const d = el('div'); d.append(el('b', '', v >= 0 && v <= 1 ? pct(v) : String(+v.toFixed(3))), el('span', '', nice(k))); ex.append(d);
+    });
+    $('#banner').classList.toggle('on', !!res.placeholder);
+    drawResult(res, true);
+  }
+
+  /* ---------- trip list ---------- */
+  function renderTrips() {
+    const ul = $('#tripList'); ul.innerHTML = '';
+    state.trips.forEach(id => {
+      const li = el('li'), b = el('button', 'trip'); b.dataset.id = id;
+      b.append(el('span', 'name', id), el('span', 'st', 'Ready'));
+      const bar = el('span', 'bar'); bar.append(el('i')); b.append(bar);
+      b.onclick = () => runTrip(id);
+      li.append(b); ul.append(li);
+    });
+  }
+  function rowOf(id) { return document.querySelector('.trip[data-id="' + CSS.escape(id) + '"]'); }
+  function setRow(id, kind, text, frac) {
+    const r = rowOf(id); if (!r) return;
+    r.classList.toggle('running', kind === 'running'); r.classList.toggle('failed', kind === 'failed');
+    $('.st', r).textContent = text;
+    const i = $('.bar i', r); i.style.width = frac == null ? '0' : Math.round(frac * 100) + '%'; i.style.background = frac == null ? '' : accColor(frac);
+  }
+  function markSelected(id) {
+    state.selected = id;
+    document.querySelectorAll('.trip').forEach(b => b.setAttribute('aria-current', b.dataset.id === id));
+  }
+  async function runTrip(id, quiet = false) {
+    if (state.busy && !quiet) return;
+    if (!quiet) state.busy = true;
+    markSelected(id); setRow(id, 'running', 'Running…');
+    try {
+      const { data, ms } = await call('/predict/' + encodeURIComponent(id));
+      if (!Array.isArray(data.gps) || !data.gps.length) throw new Error('The API response contains no GPS points.');
+      state.results[id] = { data, ms };
+      const f = fracOf(data.accuracy);
+      setRow(id, 'done', f == null ? 'Done' : pct(f), f);
+      if (!quiet || state.selected === id) showResults(id, data, ms);
+      return data;
+    } catch (e) {
+      setRow(id, 'failed', 'Failed');
+      if (!quiet) showEmpty('Prediction failed', e.message + ' Check the API terminal for details, then select the trip again.');
+    } finally { if (!quiet) state.busy = false; }
+  }
+  $('#runAll').onclick = async () => {
+    if (state.busy) return;
+    state.busy = true; const btn = $('#runAll'); btn.disabled = true;
+    const done = [];
+    for (let i = 0; i < state.trips.length; i++) {
+      btn.textContent = 'Running ' + (i + 1) + ' of ' + state.trips.length + '…';
+      const d = await runTrip(state.trips[i], true);
+      if (d) done.push(state.results[state.trips[i]]);
+    }
+    const accs = done.map(r => fracOf(r.data.accuracy)).filter(v => v != null);
+    $('#summary').hidden = false;
+    $('#sDone').textContent = done.length + '/' + state.trips.length;
+    $('#sAcc').textContent = accs.length ? pct(accs.reduce((a, b) => a + b, 0) / accs.length) : 'N/A';
+    $('#sMs').textContent = done.length ? fmtMs(done.reduce((a, r) => a + r.ms, 0) / done.length) : 'N/A';
+    btn.textContent = 'Run all trips again'; btn.disabled = false; state.busy = false;
+  };
+
+  /* ---------- connection ---------- */
+  function showEmpty(title, text, withBtn) {
+    $('#emptyTitle').textContent = title; $('#emptyText').textContent = text;
+    $('#emptyBtn').hidden = !withBtn;
+    $('#empty').classList.remove('hide');
+  }
+  function setPill(s, text) { $('#apiPill').dataset.s = s; $('#apiText').textContent = text; }
+  async function connect() {
+    setPill('wait', 'Connecting…'); $('#runAll').disabled = true;
+    try {
+      const { data, ms } = await call('/trips', 10000);
+      state.trips = data.trips || [];
+      if (!state.trips.length) throw new Error('The API returned an empty trip list.');
+      renderTrips();
+      setPill('ok', 'API connected, ' + state.trips.length + ' trips (' + fmtMs(ms) + ')');
+      $('#runAll').disabled = false;
+      showEmpty('No trip loaded', 'Choose a trip on the left. PathSnap sends it to the API and draws the matched route over the raw GPS points.');
+    } catch (e) {
+      state.trips = []; renderTrips();
+      setPill('bad', 'API offline');
+      showEmpty('Can’t reach the API', 'Tried ' + state.api + '. Check that the API is running on Laptop 1, that both laptops share a network, and that the address is right.', true);
+    }
+  }
+
+  /* ---------- settings dialog ---------- */
+  const dlg = $('#settings');
+  const openSettings = () => { $('#apiInput').value = state.api; dlg.showModal(); };
+  $('#apiPill').onclick = openSettings;
+  $('#emptyBtn').onclick = openSettings;
+  $('#cancelSet').onclick = () => dlg.close();
+  $('#saveSet').onclick = () => {
+    const v = $('#apiInput').value.trim().replace(/\/+$/, '');
+    if (v) { state.api = v; store.set('pathsnap.api', v); }
+    dlg.close(); connect();
+  };
+
+  /* ---------- layer toggles ---------- */
+  const bind = (id, group) => $(id).onchange = e => e.target.checked ? groups[group].addTo(map) : map.removeLayer(groups[group]);
+  bind('#tgGps', 'gps'); bind('#tgTrail', 'trail'); bind('#tgRoute', 'route');
+  document.querySelectorAll('#seg button').forEach(b => b.onclick = () => setBase(b.dataset.base));
+
+  setBase('light');
+  connect();
+})();
+</script>
+</body>
+</html>

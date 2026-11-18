@@ -1,8 +1,0 @@
-numpy
-pandas
-scipy
-pyproj
-pyarrow
-scikit-learn
-joblib
-pytest
