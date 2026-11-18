@@ -21,6 +21,7 @@ class CandidateConfig:
 class FeatureConfig:
     heading_window: int = 2     # GPS heading from point i-w to i+w
     context_window: int = 3     # neighbour points used for context-distance features
+    long_window: int = 10       # long baseline for direction features (robust to GPS jitter)
     min_heading_disp: float = 3.0  # metres moved before the heading is trusted
     label_max_dist: float = 50.0   # obs farther than this from its aligned route arc = unreliable label
     trip_max_median_label_dist: float = 30.0  # whole trip excluded from training above this

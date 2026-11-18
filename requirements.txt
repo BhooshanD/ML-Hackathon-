@@ -1,0 +1,21 @@
+# core pipeline
+numpy
+pandas
+scipy
+pyproj
+pyarrow
+scikit-learn
+joblib
+lightgbm
+optuna
+# API (Laptop 1)
+fastapi
+uvicorn
+# UI (Laptop 2)
+streamlit
+folium
+streamlit-folium
+requests
+# tests
+pytest
+httpx

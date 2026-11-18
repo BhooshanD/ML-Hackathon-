@@ -8,6 +8,7 @@
   "feat": {
     "heading_window": 2,
     "context_window": 3,
+    "long_window": 10,
     "min_heading_disp": 3.0,
     "label_max_dist": 50.0,
     "trip_max_median_label_dist": 30.0

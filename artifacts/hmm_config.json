@@ -1,8 +1,8 @@
 {
   "w_cls": 1.0,
-  "w_dist": 0.25,
+  "w_dist": 1.0,
   "sigma": 10.0,
-  "beta": 2.5,
+  "beta": 5.0,
   "gap_beta_scale": 0.0,
   "back_tol": 30.0,
   "back_penalty": 1.0,

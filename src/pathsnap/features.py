@@ -23,6 +23,7 @@ FEATURE_COLS = [
     "arc_length", "offset_frac", "dist_to_arc_end",
     "ctx_dist_mean", "ctx_dist_max", "ctx_dist_minus_min",
     "dt_prev", "dt_next", "out_deg_to", "in_deg_from",
+    "heading_diff_long", "heading_long_reliable", "progress_short", "progress_long",
 ]
 
 
@@ -87,6 +88,25 @@ def candidate_frame(obs: pd.DataFrame, net: RoadNetwork, cfg: Config) -> pd.Data
     c["ctx_dist_mean"] = ctx.mean(1)
     c["ctx_dist_max"] = ctx.max(1)
     c["ctx_dist_minus_min"] = c.ctx_dist_mean - c.groupby("obs_idx").ctx_dist_mean.transform("min")
+
+    # direction over a longer baseline. In slow / jittery stretches the short-window GPS
+    # heading is noise, and the two directions of a two-way road (twin arcs with identical
+    # geometry) become indistinguishable. Two remedies:
+    #  * heading_diff_long: GPS heading from point i-W to i+W (W = long_window)
+    #  * progress_*: signed distance travelled ALONG this candidate arc between an earlier
+    #    and a later point (offset of the later minus offset of the earlier projection).
+    #    Positive = moving with the arc's direction, negative = against it.
+    W = cfg.feat.long_window
+    lo, hi = np.clip(np.arange(T) - W, 0, T - 1), np.clip(np.arange(T) + W, 0, T - 1)
+    dl = P[hi] - P[lo]
+    disp_long = np.hypot(dl[:, 0], dl[:, 1])
+    hd_long = angle_diff(bearing_deg(dl[:, 0], dl[:, 1])[oi], net.bearing[a])
+    c["heading_diff_long"] = hd_long
+    c["heading_long_reliable"] = (disp_long >= 2 * cfg.feat.min_heading_disp).astype(np.int8)[oi]
+    for name, win in (("progress_short", w), ("progress_long", W)):
+        fwd = net.project(P[np.clip(oi + win, 0, T - 1)], a)[1]
+        back = net.project(P[np.clip(oi - win, 0, T - 1)], a)[1]
+        c[name] = fwd - back
     return c
 
 
